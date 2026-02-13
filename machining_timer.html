@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>加工時間カウントダウンタイマー</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #0a0a0a;
+            color: #e0e0e0;
+            font-family: 'Orbitron', monospace, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Flash overlay for time-up effect */
+        #flash-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: white;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        #flash-overlay.flash {
+            animation: flashEffect 0.6s ease-out;
+        }
+
+        @keyframes flashEffect {
+            0% { opacity: 0.9; }
+            100% { opacity: 0; }
+        }
+
+        /* Confetti canvas */
+        #confetti-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 90;
+        }
+
+        /* Explosion particles container */
+        #explosion-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 85;
+        }
+
+        .explosion-particle {
+            position: absolute;
+            border-radius: 50%;
+            pointer-events: none;
+        }
+
+        h1 {
+            font-size: 1.4rem;
+            font-weight: 700;
+            letter-spacing: 0.2em;
+            color: #00e5ff;
+            text-shadow: 0 0 20px rgba(0, 229, 255, 0.5);
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .timer-container {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 30px;
+        }
+
+        /* Ring animation around timer */
+        .timer-ring-wrapper {
+            position: relative;
+            width: 280px;
+            height: 280px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .timer-ring {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+        }
+
+        .timer-ring svg {
+            width: 100%;
+            height: 100%;
+            transform: rotate(-90deg);
+        }
+
+        .timer-ring-bg {
+            fill: none;
+            stroke: #1a1a2e;
+            stroke-width: 6;
+        }
+
+        .timer-ring-progress {
+            fill: none;
+            stroke: #00e5ff;
+            stroke-width: 6;
+            stroke-linecap: round;
+            stroke-dasharray: 814;
+            stroke-dashoffset: 0;
+            transition: stroke-dashoffset 1s linear, stroke 0.5s ease;
+            filter: drop-shadow(0 0 8px rgba(0, 229, 255, 0.6));
+        }
+
+        .timer-ring-progress.warning {
+            stroke: #ff9800;
+            filter: drop-shadow(0 0 8px rgba(255, 152, 0, 0.6));
+        }
+
+        .timer-ring-progress.danger {
+            stroke: #ff1744;
+            filter: drop-shadow(0 0 8px rgba(255, 23, 68, 0.6));
+        }
+
+        .timer-display {
+            font-size: 3.5rem;
+            font-weight: 900;
+            letter-spacing: 0.05em;
+            color: #00e5ff;
+            text-shadow: 0 0 30px rgba(0, 229, 255, 0.7), 0 0 60px rgba(0, 229, 255, 0.3);
+            z-index: 1;
+            transition: color 0.5s ease, text-shadow 0.5s ease;
+        }
+
+        .timer-display.warning {
+            color: #ff9800;
+            text-shadow: 0 0 30px rgba(255, 152, 0, 0.7), 0 0 60px rgba(255, 152, 0, 0.3);
+        }
+
+        .timer-display.danger {
+            color: #ff1744;
+            text-shadow: 0 0 30px rgba(255, 23, 68, 0.7), 0 0 60px rgba(255, 23, 68, 0.3);
+        }
+
+        .timer-display.blink {
+            animation: blinkAnim 0.5s ease-in-out infinite;
+        }
+
+        @keyframes blinkAnim {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.2; }
+        }
+
+        /* Shake animation */
+        .shake {
+            animation: shakeAnim 0.4s ease-in-out infinite;
+        }
+
+        @keyframes shakeAnim {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-8px); }
+            75% { transform: translateX(8px); }
+        }
+
+        /* Input area */
+        .input-area {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            width: 100%;
+            max-width: 320px;
+        }
+
+        .input-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .input-row label {
+            font-size: 0.75rem;
+            color: #888;
+            letter-spacing: 0.1em;
+            min-width: 30px;
+        }
+
+        .input-row input {
+            width: 80px;
+            padding: 10px;
+            font-family: 'Orbitron', monospace;
+            font-size: 1.2rem;
+            font-weight: 700;
+            text-align: center;
+            background: #1a1a2e;
+            border: 2px solid #333;
+            border-radius: 8px;
+            color: #00e5ff;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        .input-row input:focus {
+            border-color: #00e5ff;
+            box-shadow: 0 0 10px rgba(0, 229, 255, 0.3);
+        }
+
+        .input-separator {
+            font-size: 1.5rem;
+            font-weight: 900;
+            color: #555;
+        }
+
+        /* Buttons */
+        .btn-group {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .btn {
+            font-family: 'Orbitron', monospace;
+            font-size: 0.85rem;
+            font-weight: 700;
+            letter-spacing: 0.15em;
+            padding: 14px 28px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+        }
+
+        .btn-start {
+            background: linear-gradient(135deg, #00e5ff, #0091ea);
+            color: #000;
+            box-shadow: 0 4px 20px rgba(0, 229, 255, 0.4);
+        }
+
+        .btn-start:hover {
+            box-shadow: 0 6px 30px rgba(0, 229, 255, 0.6);
+            transform: translateY(-2px);
+        }
+
+        .btn-start:active {
+            transform: translateY(0);
+        }
+
+        .btn-stop {
+            background: linear-gradient(135deg, #ff9800, #f57c00);
+            color: #000;
+            box-shadow: 0 4px 20px rgba(255, 152, 0, 0.4);
+        }
+
+        .btn-stop:hover {
+            box-shadow: 0 6px 30px rgba(255, 152, 0, 0.6);
+            transform: translateY(-2px);
+        }
+
+        .btn-reset {
+            background: linear-gradient(135deg, #616161, #424242);
+            color: #fff;
+            box-shadow: 0 4px 20px rgba(97, 97, 97, 0.4);
+        }
+
+        .btn-reset:hover {
+            box-shadow: 0 6px 30px rgba(97, 97, 97, 0.6);
+            transform: translateY(-2px);
+        }
+
+        .btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        /* Time-up modal overlay */
+        #timeup-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: 200;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+
+        #timeup-overlay.show {
+            display: flex;
+        }
+
+        .timeup-text {
+            font-size: 2.5rem;
+            font-weight: 900;
+            color: #ff1744;
+            text-shadow: 0 0 40px rgba(255, 23, 68, 0.8), 0 0 80px rgba(255, 23, 68, 0.4);
+            letter-spacing: 0.2em;
+            animation: pulseGlow 1s ease-in-out infinite;
+            margin-bottom: 30px;
+        }
+
+        @keyframes pulseGlow {
+            0%, 100% {
+                text-shadow: 0 0 40px rgba(255, 23, 68, 0.8), 0 0 80px rgba(255, 23, 68, 0.4);
+                transform: scale(1);
+            }
+            50% {
+                text-shadow: 0 0 60px rgba(255, 23, 68, 1), 0 0 120px rgba(255, 23, 68, 0.6);
+                transform: scale(1.05);
+            }
+        }
+
+        .btn-close {
+            font-family: 'Orbitron', monospace;
+            font-size: 1rem;
+            font-weight: 700;
+            letter-spacing: 0.15em;
+            padding: 16px 40px;
+            border: 2px solid #ff1744;
+            border-radius: 8px;
+            background: transparent;
+            color: #ff1744;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+        }
+
+        .btn-close:hover {
+            background: #ff1744;
+            color: #000;
+            box-shadow: 0 0 30px rgba(255, 23, 68, 0.6);
+        }
+
+        /* Status label */
+        .status-label {
+            font-size: 0.7rem;
+            letter-spacing: 0.2em;
+            color: #555;
+            height: 20px;
+            transition: color 0.3s;
+        }
+
+        .status-label.running {
+            color: #00e5ff;
+        }
+
+        .status-label.paused {
+            color: #ff9800;
+        }
+
+        .status-label.finished {
+            color: #ff1744;
+        }
+
+        /* Responsive */
+        @media (max-width: 400px) {
+            h1 {
+                font-size: 1.1rem;
+            }
+            .timer-ring-wrapper {
+                width: 220px;
+                height: 220px;
+            }
+            .timer-display {
+                font-size: 2.6rem;
+            }
+            .timeup-text {
+                font-size: 1.8rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Flash overlay -->
+    <div id="flash-overlay"></div>
+
+    <!-- Confetti canvas -->
+    <canvas id="confetti-canvas"></canvas>
+
+    <!-- Explosion container -->
+    <div id="explosion-container"></div>
+
+    <!-- Time-up overlay -->
+    <div id="timeup-overlay">
+        <div class="timeup-text">TIME UP!</div>
+        <button class="btn-close" id="btn-close" onclick="closeTimeup()">閉じる</button>
+    </div>
+
+    <h1>加工時間タイマー</h1>
+
+    <div class="timer-container" id="timer-container">
+        <!-- Ring + Display -->
+        <div class="timer-ring-wrapper">
+            <div class="timer-ring">
+                <svg viewBox="0 0 280 280">
+                    <circle class="timer-ring-bg" cx="140" cy="140" r="130"></circle>
+                    <circle class="timer-ring-progress" id="ring-progress" cx="140" cy="140" r="130"></circle>
+                </svg>
+            </div>
+            <div class="timer-display" id="timer-display">00:00</div>
+        </div>
+
+        <!-- Status -->
+        <div class="status-label" id="status-label">READY</div>
+
+        <!-- Input area -->
+        <div class="input-area" id="input-area">
+            <div class="input-row">
+                <label>MIN</label>
+                <input type="number" id="input-min" value="5" min="0" max="99" placeholder="00">
+                <span class="input-separator">:</span>
+                <label>SEC</label>
+                <input type="number" id="input-sec" value="0" min="0" max="59" placeholder="00">
+            </div>
+        </div>
+
+        <!-- Buttons -->
+        <div class="btn-group">
+            <button class="btn btn-start" id="btn-start" onclick="startTimer()">START</button>
+            <button class="btn btn-stop" id="btn-stop" onclick="stopTimer()" disabled>STOP</button>
+            <button class="btn btn-reset" id="btn-reset" onclick="resetTimer()">RESET</button>
+        </div>
+    </div>
+
+    <script>
+        // ---- State ----
+        let totalSeconds = 0;
+        let remainingSeconds = 0;
+        let timerInterval = null;
+        let isRunning = false;
+        let alarmAudioCtx = null;
+        let alarmOscillator = null;
+        let alarmGain = null;
+        let vibrationIntervalId = null;
+
+        // ---- DOM refs ----
+        const display = document.getElementById('timer-display');
+        const ringProgress = document.getElementById('ring-progress');
+        const statusLabel = document.getElementById('status-label');
+        const inputArea = document.getElementById('input-area');
+        const btnStart = document.getElementById('btn-start');
+        const btnStop = document.getElementById('btn-stop');
+        const btnReset = document.getElementById('btn-reset');
+        const timerContainer = document.getElementById('timer-container');
+        const flashOverlay = document.getElementById('flash-overlay');
+        const timeupOverlay = document.getElementById('timeup-overlay');
+        const confettiCanvas = document.getElementById('confetti-canvas');
+        const explosionContainer = document.getElementById('explosion-container');
+
+        // Ring circumference
+        const RING_CIRCUMFERENCE = 2 * Math.PI * 130; // ~816.8
+
+        function formatTime(sec) {
+            const m = Math.floor(sec / 60);
+            const s = sec % 60;
+            return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+        }
+
+        function updateDisplay() {
+            display.textContent = formatTime(remainingSeconds);
+
+            // Ring progress
+            const fraction = totalSeconds > 0 ? remainingSeconds / totalSeconds : 0;
+            const offset = RING_CIRCUMFERENCE * (1 - fraction);
+            ringProgress.style.strokeDasharray = RING_CIRCUMFERENCE;
+            ringProgress.style.strokeDashoffset = offset;
+
+            // Color stages
+            const pct = totalSeconds > 0 ? remainingSeconds / totalSeconds : 1;
+            display.classList.remove('warning', 'danger', 'blink');
+            ringProgress.classList.remove('warning', 'danger');
+
+            if (remainingSeconds === 0 && isRunning) {
+                // handled by timeUp()
+            } else if (pct <= 0.1 || remainingSeconds <= 5) {
+                display.classList.add('danger', 'blink');
+                ringProgress.classList.add('danger');
+            } else if (pct <= 0.25 || remainingSeconds <= 15) {
+                display.classList.add('warning');
+                ringProgress.classList.add('warning');
+            }
+        }
+
+        // ---- Timer controls ----
+        function startTimer() {
+            const min = parseInt(document.getElementById('input-min').value) || 0;
+            const sec = parseInt(document.getElementById('input-sec').value) || 0;
+
+            if (!isRunning && remainingSeconds > 0) {
+                // Resume from paused
+            } else {
+                totalSeconds = min * 60 + sec;
+                if (totalSeconds <= 0) return;
+                remainingSeconds = totalSeconds;
+            }
+
+            isRunning = true;
+            inputArea.style.display = 'none';
+            btnStart.disabled = true;
+            btnStop.disabled = false;
+            statusLabel.textContent = 'RUNNING';
+            statusLabel.className = 'status-label running';
+
+            updateDisplay();
+
+            timerInterval = setInterval(() => {
+                remainingSeconds--;
+                if (remainingSeconds <= 0) {
+                    remainingSeconds = 0;
+                    updateDisplay();
+                    timeUp();
+                    return;
+                }
+
+                // Shake in last 3 seconds
+                if (remainingSeconds <= 3) {
+                    timerContainer.classList.add('shake');
+                } else {
+                    timerContainer.classList.remove('shake');
+                }
+
+                updateDisplay();
+            }, 1000);
+        }
+
+        function stopTimer() {
+            clearInterval(timerInterval);
+            timerInterval = null;
+            isRunning = false;
+            timerContainer.classList.remove('shake');
+            btnStart.disabled = false;
+            btnStop.disabled = true;
+            statusLabel.textContent = 'PAUSED';
+            statusLabel.className = 'status-label paused';
+        }
+
+        function resetTimer() {
+            clearInterval(timerInterval);
+            timerInterval = null;
+            isRunning = false;
+            remainingSeconds = 0;
+            totalSeconds = 0;
+
+            display.textContent = '00:00';
+            display.classList.remove('warning', 'danger', 'blink');
+            ringProgress.classList.remove('warning', 'danger');
+            ringProgress.style.strokeDashoffset = 0;
+
+            timerContainer.classList.remove('shake');
+            inputArea.style.display = 'flex';
+            btnStart.disabled = false;
+            btnStop.disabled = true;
+            statusLabel.textContent = 'READY';
+            statusLabel.className = 'status-label';
+
+            stopAlarm();
+            stopVibration();
+        }
+
+        // ---- Time Up ----
+        function timeUp() {
+            clearInterval(timerInterval);
+            timerInterval = null;
+            isRunning = false;
+
+            statusLabel.textContent = 'TIME UP';
+            statusLabel.className = 'status-label finished';
+            btnStart.disabled = true;
+            btnStop.disabled = true;
+
+            display.classList.add('danger', 'blink');
+            ringProgress.classList.add('danger');
+            timerContainer.classList.remove('shake');
+
+            // Flash
+            flashOverlay.classList.add('flash');
+            setTimeout(() => flashOverlay.classList.remove('flash'), 700);
+
+            // Explosion
+            createExplosion();
+
+            // Confetti
+            launchConfetti();
+
+            // Alarm sound
+            startAlarm();
+
+            // Vibration (smartphone)
+            startVibration();
+
+            // Show overlay
+            setTimeout(() => {
+                timeupOverlay.classList.add('show');
+            }, 400);
+        }
+
+        function closeTimeup() {
+            timeupOverlay.classList.remove('show');
+            stopAlarm();
+            stopVibration();
+            display.classList.remove('blink');
+        }
+
+        // ---- Alarm sound (Web Audio API) ----
+        function startAlarm() {
+            try {
+                alarmAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                alarmGain = alarmAudioCtx.createGain();
+                alarmGain.gain.value = 0.3;
+                alarmGain.connect(alarmAudioCtx.destination);
+
+                alarmOscillator = alarmAudioCtx.createOscillator();
+                alarmOscillator.type = 'square';
+                alarmOscillator.frequency.value = 880;
+                alarmOscillator.connect(alarmGain);
+                alarmOscillator.start();
+
+                // Pulsing alarm effect
+                const now = alarmAudioCtx.currentTime;
+                for (let i = 0; i < 200; i++) {
+                    alarmGain.gain.setValueAtTime(0.3, now + i * 0.5);
+                    alarmGain.gain.setValueAtTime(0, now + i * 0.5 + 0.3);
+                }
+            } catch (e) {
+                // Audio not supported - silent fallback
+            }
+        }
+
+        function stopAlarm() {
+            try {
+                if (alarmOscillator) {
+                    alarmOscillator.stop();
+                    alarmOscillator.disconnect();
+                    alarmOscillator = null;
+                }
+                if (alarmGain) {
+                    alarmGain.disconnect();
+                    alarmGain = null;
+                }
+                if (alarmAudioCtx) {
+                    alarmAudioCtx.close();
+                    alarmAudioCtx = null;
+                }
+            } catch (e) {
+                // ignore
+            }
+        }
+
+        // ---- Vibration API (smartphone) ----
+        function startVibration() {
+            if (!navigator.vibrate) return; // API非対応ブラウザでは何もしない
+
+            // 振動500ms → 休止200msのパターンをループ
+            // navigator.vibrate() は一度渡したパターンが終了すると止まるため、
+            // setIntervalで繰り返しリクエストして継続的に振動させる
+            try {
+                navigator.vibrate([500, 200]);
+            } catch (e) {
+                return; // vibrate呼び出しでエラーが出た場合は無視
+            }
+
+            vibrationIntervalId = setInterval(() => {
+                try {
+                    navigator.vibrate([500, 200]);
+                } catch (e) {
+                    stopVibration();
+                }
+            }, 700); // 500ms振動 + 200ms休止 = 700msごとに再発行
+        }
+
+        function stopVibration() {
+            if (vibrationIntervalId) {
+                clearInterval(vibrationIntervalId);
+                vibrationIntervalId = null;
+            }
+            try {
+                if (navigator.vibrate) {
+                    navigator.vibrate(0); // 即座に振動停止
+                }
+            } catch (e) {
+                // ignore
+            }
+        }
+
+        // ---- Explosion particles ----
+        function createExplosion() {
+            const colors = ['#ff1744', '#ff9800', '#ffeb3b', '#00e5ff', '#e040fb', '#76ff03'];
+            const centerX = window.innerWidth / 2;
+            const centerY = window.innerHeight / 2;
+
+            for (let i = 0; i < 40; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'explosion-particle';
+                const size = Math.random() * 10 + 4;
+                const color = colors[Math.floor(Math.random() * colors.length)];
+                const angle = (Math.PI * 2 * i) / 40;
+                const distance = Math.random() * 200 + 100;
+                const dx = Math.cos(angle) * distance;
+                const dy = Math.sin(angle) * distance;
+
+                particle.style.width = size + 'px';
+                particle.style.height = size + 'px';
+                particle.style.background = color;
+                particle.style.boxShadow = `0 0 ${size}px ${color}`;
+                particle.style.left = centerX + 'px';
+                particle.style.top = centerY + 'px';
+                particle.style.transition = 'all 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+                particle.style.opacity = '1';
+
+                explosionContainer.appendChild(particle);
+
+                requestAnimationFrame(() => {
+                    particle.style.left = (centerX + dx) + 'px';
+                    particle.style.top = (centerY + dy) + 'px';
+                    particle.style.opacity = '0';
+                    particle.style.transform = `scale(0.1)`;
+                });
+
+                setTimeout(() => {
+                    particle.remove();
+                }, 900);
+            }
+        }
+
+        // ---- Confetti ----
+        function launchConfetti() {
+            const ctx = confettiCanvas.getContext('2d');
+            confettiCanvas.width = window.innerWidth;
+            confettiCanvas.height = window.innerHeight;
+
+            const pieces = [];
+            const colors = ['#ff1744', '#ff9800', '#ffeb3b', '#00e5ff', '#e040fb', '#76ff03', '#ffffff'];
+
+            for (let i = 0; i < 120; i++) {
+                pieces.push({
+                    x: Math.random() * confettiCanvas.width,
+                    y: -10 - Math.random() * 200,
+                    w: Math.random() * 8 + 4,
+                    h: Math.random() * 5 + 2,
+                    color: colors[Math.floor(Math.random() * colors.length)],
+                    vy: Math.random() * 3 + 2,
+                    vx: (Math.random() - 0.5) * 4,
+                    rotation: Math.random() * 360,
+                    rotSpeed: (Math.random() - 0.5) * 10,
+                    opacity: 1
+                });
+            }
+
+            let frameCount = 0;
+            function animateConfetti() {
+                ctx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+                frameCount++;
+
+                let alive = false;
+                pieces.forEach(p => {
+                    if (p.opacity <= 0) return;
+                    alive = true;
+
+                    p.y += p.vy;
+                    p.x += p.vx;
+                    p.rotation += p.rotSpeed;
+                    p.vy += 0.05; // gravity
+
+                    if (p.y > confettiCanvas.height + 20) {
+                        p.opacity = 0;
+                        return;
+                    }
+                    if (frameCount > 100) {
+                        p.opacity -= 0.02;
+                    }
+
+                    ctx.save();
+                    ctx.translate(p.x, p.y);
+                    ctx.rotate((p.rotation * Math.PI) / 180);
+                    ctx.globalAlpha = Math.max(0, p.opacity);
+                    ctx.fillStyle = p.color;
+                    ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+                    ctx.restore();
+                });
+
+                if (alive) {
+                    requestAnimationFrame(animateConfetti);
+                } else {
+                    ctx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+                }
+            }
+
+            animateConfetti();
+        }
+
+        // Initialize display
+        updateDisplay();
+    </script>
+</body>
+</html>
